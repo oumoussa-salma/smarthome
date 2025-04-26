@@ -176,7 +176,7 @@ export const irrigationZones: IrrigationZone[] = [
 ];
 
 // Team members
-export const teamMembers: TeamMember[] = [
+export const teamMember55s: TeamMember[] = [
   {
     id: 'team-1',
     name: 'Alex Johnson',
@@ -257,4 +257,62 @@ export const alerts: Alert[] = [
     relatedEntityId: 'zone-b',
     relatedEntityType: 'irrigation'
   }
+];
+
+// This would be in ../utils/mockData.ts (not modified here due to constraints)
+export const teamMembers = [
+  {
+    id: '1',
+    name: 'Ikram Benfellah',
+    role: 'Student',
+    bio: 'Passionate about smart agriculture and technology.', // Default bio
+    avatar: '/images/photo1.png',
+    status: 'online', // Default status
+    lastActive: new Date().toISOString(), // Default recent activity
+  },
+  {
+    id: '2',
+    name: 'Fatima Zahra Fadel',
+    role: 'Student',
+    bio: 'Passionate about smart agriculture and technology.',
+    avatar: '/images/photo2.png',
+    status: 'online',
+    lastActive: new Date().toISOString(),
+  },
+  {
+    id: '3',
+    name: 'Mostapha Id bella',
+    role: 'Student',
+    bio: 'Passionate about smart agriculture and technology.',
+    avatar: '/images/photo3.png',
+    status: 'online',
+    lastActive: new Date().toISOString(),
+  },
+  {
+    id: '4',
+    name: 'Anwar meliari',
+    role: 'Student',
+    bio: 'Passionate about smart agriculture and technology.',
+    avatar: '/images/photo4.png',
+    status: 'online',
+    lastActive: new Date().toISOString(),
+  },
+  {
+    id: '5',
+    name: 'Zahra maddah',
+    role: 'Student',
+    bio: 'Passionate about smart agriculture and technology.',
+    avatar: '/images/photo5.png',
+    status: 'online',
+    lastActive: new Date().toISOString(),
+  },
+  {
+    id: '6',
+    name: 'Ziad chi l3ayba',
+    role: 'Student',
+    bio: 'Passionate about smart agriculture and technology.',
+    avatar: '/images/photo6.png',
+    status: 'online',
+    lastActive: new Date().toISOString(),
+  },
 ];
