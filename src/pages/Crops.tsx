@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CropCard from '../components/ui/CropCard';
 import { crops } from '../utils/mockData';
 import { Crop } from '../types';
-import { Search, Filter, X, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Search, Filter, X, CheckCircle, AlertCircle, AlertTriangle, Camera, Upload, Smartphone } from 'lucide-react';
+import { analyzePlantImage, captureFromWebcam, captureFromDroidcam } from '../utils/plantAnalysis';
 
 const Crops: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -17,6 +18,14 @@ const Crops: React.FC = () => {
     issues: string[];
     recommendations: string[];
   } | null>(null);
+  
+  // New state for image handling
+  const [showImageOptions, setShowImageOptions] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [imageSource, setImageSource] = useState<'upload' | 'webcam' | 'droidcam' | null>(null);
+  const [droidcamSettings, setDroidcamSettings] = useState({ ip: '192.168.1.2', port: '4747' });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   
   const filteredCrops = crops.filter(crop => {
     const matchesSearch = crop.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -32,77 +41,149 @@ const Crops: React.FC = () => {
     setSelectedCrop(crop);
     setIsModalOpen(true);
     setAnalysisResult(null);
+    setSelectedImage(null);
+    setImageSource(null);
+    setShowImageOptions(false);
+    setAnalysisError(null);
   };
   
   const handleHealthCheck = () => {
-    if (!selectedCrop) return;
-    
-    setIsAnalyzing(true);
-    
-    // Simulate AI analysis with a timeout
-    setTimeout(() => {
-      let result;
+    setShowImageOptions(true);
+  };
+  
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedImage(URL.createObjectURL(file));
+      setImageSource('upload');
       
-      // Simulate different results based on current health status
-      switch (selectedCrop.healthStatus) {
-        case 'healthy':
-          result = {
-            status: 'healthy' as const,
-            confidence: 93,
-            issues: [],
-            recommendations: [
-              'Continue current care regimen',
-              'Maintain regular irrigation schedule',
-              'Monitor for any changes in leaf color'
-            ]
-          };
-          break;
-        case 'at-risk':
-          result = {
-            status: 'at-risk' as const,
-            confidence: 87,
-            issues: [
-              'Early signs of nutrient deficiency',
-              'Slight discoloration on lower leaves'
-            ],
-            recommendations: [
-              'Increase nitrogen fertilization',
-              'Adjust watering frequency',
-              'Monitor closely for the next 48 hours'
-            ]
-          };
-          break;
-        case 'diseased':
-          result = {
-            status: 'diseased' as const,
-            confidence: 95,
-            issues: [
-              'Fungal infection detected',
-              'Leaf spotting and wilting',
-              'Potential root damage'
-            ],
-            recommendations: [
-              'Apply fungicide treatment immediately',
-              'Isolate affected plants',
-              'Reduce humidity in growing environment',
-              'Consider removing severely affected leaves'
-            ]
-          };
-          break;
-        default:
-          result = {
-            status: 'healthy' as const,
-            confidence: 90,
-            issues: [],
-            recommendations: [
-              'Continue current care regimen'
-            ]
-          };
-      }
+      // Begin analysis
+      analyzeImage(file);
+    }
+  };
+  
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+  
+  const handleWebcamCapture = async () => {
+    try {
+      setIsAnalyzing(true);
+      setImageSource('webcam');
       
-      setAnalysisResult(result);
+      const imageBlob = await captureFromWebcam();
+      const imageUrl = URL.createObjectURL(imageBlob);
+      setSelectedImage(imageUrl);
+      
+      // Analyze the captured image
+      analyzeImage(imageBlob);
+    } catch (error) {
+      console.error('Error capturing from webcam:', error);
+      setAnalysisError('Failed to capture from webcam. Please check your camera access or try uploading an image instead.');
       setIsAnalyzing(false);
-    }, 2500);
+    }
+  };
+  
+  const handleDroidcamCapture = async () => {
+    try {
+      setIsAnalyzing(true);
+      setImageSource('droidcam');
+      
+      const imageBlob = await captureFromDroidcam(
+        droidcamSettings.ip,
+        droidcamSettings.port
+      );
+      
+      const imageUrl = URL.createObjectURL(imageBlob);
+      setSelectedImage(imageUrl);
+      
+      // Analyze the captured image
+      analyzeImage(imageBlob);
+    } catch (error) {
+      console.error('Error capturing from DroidCam:', error);
+      setAnalysisError('DroidCam capture is not available in the web interface. Please use your device\'s webcam or upload an image instead.');
+      setIsAnalyzing(false);
+    }
+  };
+  
+  const analyzeImage = async (imageSource: File | Blob | string) => {
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    
+    try {
+      // Call our plant analysis utility
+      const result = await analyzePlantImage(imageSource);
+      
+      // Process the result
+      processAnalysisResult(result);
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      setAnalysisError('Failed to analyze the image. Please try again or try a different image.');
+      setIsAnalyzing(false);
+    }
+  };
+  
+  const processAnalysisResult = (data: any) => {
+    // Map health status
+    const mappedStatus = 
+      data.health_status === 'healthy' ? 'healthy' as const : 
+      data.health_status === 'diseased' ? 'diseased' as const : 
+      'at-risk' as const;
+    
+    // Calculate a confidence score
+    const confidence = Math.floor(Math.random() * 15) + 85; // Random number between 85-99 for demo
+    
+    // Parse recommendations into an array if it's a string
+    const recommendations = typeof data.treatment_recommendations === 'string'
+      ? data.treatment_recommendations.split('\n').filter((item: string) => item.trim() !== '')
+      : data.treatment_recommendations || [];
+    
+    // Create issues array based on health status and disease name
+    const issues = [];
+    
+    if (mappedStatus === 'healthy') {
+      issues.push('Plant appears healthy');
+    } else {
+      // Only add disease name if it's not 'none' or 'unknown'
+      if (data.disease_name && 
+          data.disease_name.toLowerCase() !== 'none' && 
+          data.disease_name.toLowerCase() !== 'unknown') {
+        issues.push(`Disease: ${data.disease_name}`);
+      } else if (mappedStatus === 'diseased') {
+        issues.push('Unidentified disease detected');
+      } else if (mappedStatus === 'at-risk') {
+        issues.push('Early signs of stress detected');
+      }
+    }
+    
+    // Always add crop identification if available
+    if (data.crop_name && data.crop_name !== 'unknown') {
+      issues.push(`Crop identified as: ${data.crop_name}`);
+    }
+    
+    const result = {
+      status: mappedStatus,
+      confidence: confidence,
+      issues: issues,
+      recommendations: recommendations.length > 0 ? recommendations : [
+        'Continue current care regimen',
+        'Monitor regularly for changes'
+      ],
+    };
+    
+    setAnalysisResult(result);
+    setIsAnalyzing(false);
+    setShowImageOptions(false);
+  };
+  
+  const resetAnalysis = () => {
+    setSelectedImage(null);
+    setAnalysisResult(null);
+    setShowImageOptions(true);
+    setImageSource(null);
+    setAnalysisError(null);
   };
   
   const getStatusIcon = (status: 'healthy' | 'at-risk' | 'diseased') => {
@@ -176,6 +257,15 @@ const Crops: React.FC = () => {
           ))}
         </div>
       )}
+      
+      {/* Hidden file input for image upload */}
+      <input 
+        ref={fileInputRef}
+        type="file" 
+        accept="image/*" 
+        className="hidden"
+        onChange={handleFileUpload} 
+      />
       
       {/* Crop Detail Modal */}
       <AnimatePresence>
@@ -282,7 +372,8 @@ const Crops: React.FC = () => {
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Health Analysis</h3>
                     
-                    {!analysisResult && !isAnalyzing && (
+                    {/* Initial state - no analysis and not analyzing */}
+                    {!showImageOptions && !analysisResult && !isAnalyzing && !selectedImage && (
                       <div className="flex flex-col items-center justify-center h-36 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
                         <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">Run a health check to analyze this crop</p>
                         <button
@@ -294,13 +385,115 @@ const Crops: React.FC = () => {
                       </div>
                     )}
                     
-                    {isAnalyzing && (
-                      <div className="flex flex-col items-center justify-center h-36 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500 mb-3"></div>
-                        <p className="text-gray-600 dark:text-gray-400 text-sm">Analyzing crop health...</p>
+                    {/* Image capture/upload options */}
+                    {showImageOptions && !isAnalyzing && !selectedImage && (
+                      <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Capture or upload a photo of your crop</h4>
+                        <div className="grid grid-cols-1 gap-3">
+                          <button
+                            className="flex items-center justify-center bg-secondary-50 dark:bg-secondary-900/30 hover:bg-secondary-100 dark:hover:bg-secondary-800/50 text-secondary-700 dark:text-secondary-300 font-medium py-2 px-4 rounded-md transition-colors duration-200"
+                            onClick={triggerFileInput}
+                          >
+                            <Upload className="h-5 w-5 mr-2" />
+                            Upload Photo
+                          </button>
+                          
+                          <button
+                            className="flex items-center justify-center bg-primary-50 dark:bg-primary-900/30 hover:bg-primary-100 dark:hover:bg-primary-800/50 text-primary-700 dark:text-primary-300 font-medium py-2 px-4 rounded-md transition-colors duration-200"
+                            onClick={handleWebcamCapture}
+                          >
+                            <Camera className="h-5 w-5 mr-2" />
+                            Capture from Webcam
+                          </button>
+                          
+                          <div>
+                            <button
+                              className="flex items-center justify-center w-full bg-accent-50 dark:bg-accent-900/30 hover:bg-accent-100 dark:hover:bg-accent-800/50 text-accent-700 dark:text-accent-300 font-medium py-2 px-4 rounded-md transition-colors duration-200"
+                              onClick={handleDroidcamCapture}
+                            >
+                              <Smartphone className="h-5 w-5 mr-2" />
+                              Capture from DroidCam
+                            </button>
+                            
+                            <div className="mt-2 flex space-x-2">
+                              <input
+                                type="text"
+                                placeholder="IP Address"
+                                value={droidcamSettings.ip}
+                                onChange={(e) => setDroidcamSettings(prev => ({ ...prev, ip: e.target.value }))}
+                                className="block w-full text-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Port"
+                                value={droidcamSettings.port}
+                                onChange={(e) => setDroidcamSettings(prev => ({ ...prev, port: e.target.value }))}
+                                className="block w-24 text-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                          </div>
+                          
+                          <button
+                            className="mt-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 underline"
+                            onClick={() => setShowImageOptions(false)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
                     )}
                     
+                    {/* Analysis error message */}
+                    {analysisError && (
+                      <div className="border border-error-200 dark:border-error-800 bg-error-50 dark:bg-error-900/20 text-error-800 dark:text-error-300 rounded-lg p-4 mb-3">
+                        <h4 className="text-sm font-medium flex items-center">
+                          <AlertCircle className="h-4 w-4 mr-1.5" />
+                          Error
+                        </h4>
+                        <p className="mt-1 text-sm">{analysisError}</p>
+                        <button
+                          className="mt-2 text-sm underline hover:no-underline"
+                          onClick={resetAnalysis}
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Loading state */}
+                    {isAnalyzing && (
+                      <div className="flex flex-col items-center justify-center h-36 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500 mb-3"></div>
+                        <p className="text-gray-600 dark:text-gray-400 text-sm">
+                          {imageSource === 'webcam' 
+                            ? 'Capturing from webcam...' 
+                            : imageSource === 'droidcam' 
+                              ? 'Connecting to DroidCam...' 
+                              : 'Analyzing crop health...'}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Display the selected image (if there is one) */}
+                    {selectedImage && !isAnalyzing && (
+                      <div className="mb-3">
+                        <div className="relative">
+                          <img 
+                            src={selectedImage}
+                            alt="Captured crop" 
+                            className="w-full h-40 object-contain border border-gray-200 dark:border-gray-700 rounded-lg"
+                          />
+                          <button
+                            className="absolute top-2 right-2 bg-black bg-opacity-50 hover:bg-opacity-70 text-white rounded-full p-1 transition-colors duration-200"
+                            onClick={() => setSelectedImage(null)}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Analysis result */}
                     {analysisResult && !isAnalyzing && (
                       <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                         <div className={`px-4 py-3 flex items-center ${
@@ -343,6 +536,13 @@ const Crops: React.FC = () => {
                               ))}
                             </ul>
                           </div>
+                          
+                          <button
+                            className="mt-3 text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 underline"
+                            onClick={resetAnalysis}
+                          >
+                            Try another image
+                          </button>
                         </div>
                       </div>
                     )}
