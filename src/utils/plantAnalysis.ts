@@ -394,120 +394,317 @@ export async function captureFromWebcam() {
 export async function captureFromDroidcam(ipAddress, port) {
   try {
     // For direct DroidCam browser integration
-    const url = `http://${ipAddress}:${port}/mjpegfeed`;
+    const webUrl = `http://${ipAddress}:${port}`;
+    const mjpegUrl = `${webUrl}/mjpegfeed`;
+    const photoUrl = `${webUrl}/photo.jpg`;
     
-    // Show a message to user
-    alert(`Opening DroidCam feed from ${url}\nPlease allow the connection if prompted.`);
-    
-    // Try to load the image directly from DroidCam
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Could not connect to DroidCam');
-      }
+    // Create a DroidCam viewer with screenshot capability
+    return new Promise((resolve, reject) => {
+      const modal = document.createElement('div');
+      modal.style.position = 'fixed';
+      modal.style.top = '0';
+      modal.style.left = '0';
+      modal.style.width = '100%';
+      modal.style.height = '100%';
+      modal.style.backgroundColor = 'rgba(0,0,0,0.9)';
+      modal.style.display = 'flex';
+      modal.style.flexDirection = 'column';
+      modal.style.alignItems = 'center';
+      modal.style.justifyContent = 'center';
+      modal.style.zIndex = '9999';
       
-      // Since MJPEG is a video format, we'll try to capture a single frame
-      // This is a simplified approach and might not work with all DroidCam implementations
-      const data = await response.blob();
+      const viewerContainer = document.createElement('div');
+      viewerContainer.style.width = '90%';
+      viewerContainer.style.maxWidth = '800px';
+      viewerContainer.style.maxHeight = '70vh';
+      viewerContainer.style.position = 'relative';
+      viewerContainer.style.borderRadius = '8px';
+      viewerContainer.style.overflow = 'hidden';
+      viewerContainer.style.backgroundColor = '#000';
+      viewerContainer.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
       
-      // For simplicity, just return the blob as is
-      // In a real implementation, we would need to extract a single JPEG frame
-      return data;
-    } catch (directError) {
-      console.error('Direct DroidCam connection failed:', directError);
+      const headerDiv = document.createElement('div');
+      headerDiv.style.padding = '10px 16px';
+      headerDiv.style.backgroundColor = '#1c1c1c';
+      headerDiv.style.color = 'white';
+      headerDiv.style.display = 'flex';
+      headerDiv.style.justifyContent = 'space-between';
+      headerDiv.style.alignItems = 'center';
       
-      // Fallback: Try to use the DroidCam web interface
-      try {
-        // Create an iframe to show the DroidCam web interface
-        return new Promise((resolve, reject) => {
-          const modal = document.createElement('div');
-          modal.style.position = 'fixed';
-          modal.style.top = '0';
-          modal.style.left = '0';
-          modal.style.width = '100%';
-          modal.style.height = '100%';
-          modal.style.backgroundColor = 'rgba(0,0,0,0.8)';
-          modal.style.display = 'flex';
-          modal.style.flexDirection = 'column';
-          modal.style.alignItems = 'center';
-          modal.style.justifyContent = 'center';
-          modal.style.zIndex = '9999';
+      const headerTitle = document.createElement('h3');
+      headerTitle.textContent = 'DroidCam Viewer';
+      headerTitle.style.margin = '0';
+      headerTitle.style.fontSize = '16px';
+      
+      const statusSpan = document.createElement('span');
+      statusSpan.textContent = 'Connecting...';
+      statusSpan.style.fontSize = '14px';
+      statusSpan.style.color = '#aaa';
+      
+      headerDiv.appendChild(headerTitle);
+      headerDiv.appendChild(statusSpan);
+      
+      // Create content area - we'll try both iframe and img approaches
+      const contentDiv = document.createElement('div');
+      contentDiv.style.width = '100%';
+      contentDiv.style.aspectRatio = '4/3';
+      contentDiv.style.backgroundColor = '#000';
+      contentDiv.style.display = 'flex';
+      contentDiv.style.justifyContent = 'center';
+      contentDiv.style.alignItems = 'center';
+      contentDiv.style.overflow = 'hidden';
+      
+      // Try to load DroidCam feed
+      let feedLoaded = false;
+      
+      // Approach 1: Try MJPEG stream in an img tag
+      const imageElement = document.createElement('img');
+      imageElement.style.width = '100%';
+      imageElement.style.height = '100%';
+      imageElement.style.objectFit = 'contain';
+      imageElement.style.display = 'none'; // Start hidden
+      
+      // Approach 2: Try iframe to DroidCam web interface
+      const iframeElement = document.createElement('iframe');
+      iframeElement.style.width = '100%';
+      iframeElement.style.height = '100%';
+      iframeElement.style.border = 'none';
+      iframeElement.style.display = 'none'; // Start hidden
+      
+      // Add loading indicator
+      const loadingDiv = document.createElement('div');
+      loadingDiv.innerHTML = `
+        <div style="text-align: center;">
+          <div style="border: 4px solid #333; border-top: 4px solid #2D9D78; border-radius: 50%; width: 40px; height: 40px; margin: 0 auto 16px; animation: spin 1s linear infinite;"></div>
+          <p style="color: white; margin: 0;">Connecting to DroidCam...</p>
+          <p style="color: #aaa; font-size: 14px; margin: 8px 0 0;">Make sure DroidCam is running and connected to your network</p>
+        </div>
+      `;
+      loadingDiv.style.padding = '20px';
+      
+      // Add animation style
+      const styleElement = document.createElement('style');
+      styleElement.textContent = `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(styleElement);
+      
+      contentDiv.appendChild(loadingDiv);
+      contentDiv.appendChild(imageElement);
+      contentDiv.appendChild(iframeElement);
+      
+      // Add button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.padding = '16px';
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.justifyContent = 'center';
+      buttonContainer.style.gap = '10px';
+      buttonContainer.style.backgroundColor = '#1c1c1c';
+      
+      const captureButton = document.createElement('button');
+      captureButton.textContent = 'Capture Photo';
+      captureButton.style.padding = '10px 20px';
+      captureButton.style.backgroundColor = '#2D9D78';
+      captureButton.style.color = 'white';
+      captureButton.style.border = 'none';
+      captureButton.style.borderRadius = '4px';
+      captureButton.style.cursor = 'pointer';
+      captureButton.style.fontWeight = 'bold';
+      captureButton.disabled = true;
+      captureButton.style.opacity = '0.6';
+      
+      const uploadButton = document.createElement('button');
+      uploadButton.textContent = 'Upload Image';
+      uploadButton.style.padding = '10px 20px';
+      uploadButton.style.backgroundColor = '#4A90E2';
+      uploadButton.style.color = 'white';
+      uploadButton.style.border = 'none';
+      uploadButton.style.borderRadius = '4px';
+      uploadButton.style.cursor = 'pointer';
+      
+      const cancelButton = document.createElement('button');
+      cancelButton.textContent = 'Cancel';
+      cancelButton.style.padding = '10px 20px';
+      cancelButton.style.backgroundColor = '#6B7280';
+      cancelButton.style.color = 'white';
+      cancelButton.style.border = 'none';
+      cancelButton.style.borderRadius = '4px';
+      cancelButton.style.cursor = 'pointer';
+      
+      // Create hidden file input
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'image/*';
+      fileInput.style.display = 'none';
+      
+      buttonContainer.appendChild(captureButton);
+      buttonContainer.appendChild(uploadButton);
+      buttonContainer.appendChild(cancelButton);
+      buttonContainer.appendChild(fileInput);
+      
+      // Assemble the viewer
+      viewerContainer.appendChild(headerDiv);
+      viewerContainer.appendChild(contentDiv);
+      viewerContainer.appendChild(buttonContainer);
+      
+      modal.appendChild(viewerContainer);
+      document.body.appendChild(modal);
+      
+      // Function to clean up
+      const cleanup = () => {
+        document.body.removeChild(modal);
+        document.head.removeChild(styleElement);
+      };
+      
+      // Try loading direct MJPEG feed first
+      const checkMjpegFeed = () => {
+        fetch(mjpegUrl, { method: 'HEAD', mode: 'no-cors' })
+          .then(() => {
+            // MJPEG might be available, try to load it
+            imageElement.onload = () => {
+              loadingDiv.style.display = 'none';
+              imageElement.style.display = 'block';
+              statusSpan.textContent = 'Connected';
+              statusSpan.style.color = '#4CAF50';
+              captureButton.disabled = false;
+              captureButton.style.opacity = '1';
+              feedLoaded = true;
+            };
+            
+            imageElement.onerror = () => {
+              // If MJPEG fails, try iframe approach
+              tryIframeApproach();
+            };
+            
+            // Add cache-busting parameter to prevent caching
+            imageElement.src = `${mjpegUrl}?cachebust=${new Date().getTime()}`;
+          })
+          .catch(() => {
+            // If fetch fails, try iframe approach
+            tryIframeApproach();
+          });
+      };
+      
+      // Try loading DroidCam webpage in an iframe
+      const tryIframeApproach = () => {
+        fetch(webUrl, { mode: 'no-cors' })
+          .then(() => {
+            // DroidCam web interface might be available
+            iframeElement.onload = () => {
+              loadingDiv.style.display = 'none';
+              iframeElement.style.display = 'block';
+              statusSpan.textContent = 'Connected (webpage view)';
+              statusSpan.style.color = '#4CAF50';
+              captureButton.disabled = false;
+              captureButton.style.opacity = '1';
+              feedLoaded = true;
+            };
+            
+            iframeElement.onerror = () => {
+              // If both approaches fail, show upload option
+              showCaptureFailedMessage();
+            };
+            
+            iframeElement.src = webUrl;
+          })
+          .catch(() => {
+            showCaptureFailedMessage();
+          });
+      };
+      
+      // Show message when capture fails
+      const showCaptureFailedMessage = () => {
+        loadingDiv.innerHTML = `
+          <div style="text-align: center;">
+            <p style="color: white; margin: 0;">Could not connect to DroidCam</p>
+            <p style="color: #aaa; font-size: 14px; margin: 8px 0 0;">
+              Please check that DroidCam is running at ${webUrl}<br>
+              You can upload a screenshot of DroidCam instead.
+            </p>
+          </div>
+        `;
+        statusSpan.textContent = 'Connection failed';
+        statusSpan.style.color = '#F44336';
+      };
+      
+      // Start connection process
+      checkMjpegFeed();
+      
+      // Capture button handler - tries to get a photo from DroidCam
+      captureButton.onclick = async () => {
+        if (!feedLoaded) return;
+        
+        try {
+          // First try to use the /photo.jpg endpoint if available
+          statusSpan.textContent = 'Capturing...';
           
-          const messageDiv = document.createElement('div');
-          messageDiv.style.color = 'white';
-          messageDiv.style.marginBottom = '20px';
-          messageDiv.style.textAlign = 'center';
-          messageDiv.style.maxWidth = '80%';
-          messageDiv.innerHTML = `
-            <h3>DroidCam Capture</h3>
-            <p>Please take a screenshot of your DroidCam view and upload it.</p>
-            <p>Due to browser security restrictions, we cannot directly capture from DroidCam without the backend server.</p>
-          `;
-          
-          const buttonContainer = document.createElement('div');
-          buttonContainer.style.display = 'flex';
-          buttonContainer.style.justifyContent = 'center';
-          buttonContainer.style.gap = '10px';
-          
-          const uploadButton = document.createElement('button');
-          uploadButton.textContent = 'Upload Screenshot';
-          uploadButton.style.padding = '10px 20px';
-          uploadButton.style.backgroundColor = '#2D9D78';
-          uploadButton.style.color = 'white';
-          uploadButton.style.border = 'none';
-          uploadButton.style.borderRadius = '4px';
-          uploadButton.style.cursor = 'pointer';
-          
-          const cancelButton = document.createElement('button');
-          cancelButton.textContent = 'Cancel';
-          cancelButton.style.padding = '10px 20px';
-          cancelButton.style.backgroundColor = '#6B7280';
-          cancelButton.style.color = 'white';
-          cancelButton.style.border = 'none';
-          cancelButton.style.borderRadius = '4px';
-          cancelButton.style.cursor = 'pointer';
-          
-          // Create hidden file input
-          const fileInput = document.createElement('input');
-          fileInput.type = 'file';
-          fileInput.accept = 'image/*';
-          fileInput.style.display = 'none';
-          
-          // Handle file selection
-          fileInput.onchange = (e) => {
-            if (e.target.files && e.target.files[0]) {
-              const file = e.target.files[0];
-              document.body.removeChild(modal);
-              resolve(file);
+          const photoResponse = await fetch(photoUrl, { mode: 'no-cors' })
+            .catch(() => ({ ok: false }));
+            
+          if (photoResponse.ok) {
+            const blob = await photoResponse.blob();
+            cleanup();
+            resolve(blob);
+          } else {
+            // If /photo.jpg is not available, use canvas to capture the current frame
+            if (imageElement.style.display === 'block') {
+              // Capture from the image element
+              const canvas = document.createElement('canvas');
+              canvas.width = imageElement.naturalWidth || 640;
+              canvas.height = imageElement.naturalHeight || 480;
+              const ctx = canvas.getContext('2d');
+              
+              // Draw the current frame to canvas
+              ctx.drawImage(imageElement, 0, 0, canvas.width, canvas.height);
+              
+              // Convert to blob
+              canvas.toBlob(blob => {
+                cleanup();
+                resolve(blob);
+              }, 'image/jpeg', 0.95);
+            } else {
+              // If we're using iframe, prompt the user to upload a screenshot
+              alert('Please take a screenshot of the DroidCam view and upload it using the "Upload Image" button.');
             }
-          };
-          
-          // Button handlers
-          uploadButton.onclick = () => {
-            fileInput.click();
-          };
-          
-          cancelButton.onclick = () => {
-            document.body.removeChild(modal);
-            reject(new Error('User cancelled DroidCam capture'));
-          };
-          
-          buttonContainer.appendChild(uploadButton);
-          buttonContainer.appendChild(cancelButton);
-          
-          modal.appendChild(messageDiv);
-          modal.appendChild(buttonContainer);
-          modal.appendChild(fileInput);
-          
-          document.body.appendChild(modal);
-        });
-      } catch (fallbackError) {
-        console.error('DroidCam fallback also failed:', fallbackError);
-        throw new Error('Could not connect to DroidCam. Please check IP and port, or try using the webcam instead.');
-      }
-    }
+          }
+        } catch (error) {
+          console.error('Error capturing from DroidCam:', error);
+          alert('Failed to capture image. Please use the "Upload Image" option instead.');
+        }
+      };
+      
+      // Upload button handler
+      uploadButton.onclick = () => {
+        fileInput.click();
+      };
+      
+      // File selection handler
+      fileInput.onchange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          cleanup();
+          resolve(file);
+        }
+      };
+      
+      // Cancel button handler
+      cancelButton.onclick = () => {
+        cleanup();
+        reject(new Error('User cancelled DroidCam capture'));
+      };
+      
+      // Set a timeout to show upload option if connection takes too long
+      setTimeout(() => {
+        if (!feedLoaded) {
+          showCaptureFailedMessage();
+        }
+      }, 5000);
+    });
   } catch (error) {
-    console.error('Error capturing from DroidCam:', error);
+    console.error('Error with DroidCam capture:', error);
     throw new Error('Failed to capture from DroidCam: ' + error.message);
   }
 }

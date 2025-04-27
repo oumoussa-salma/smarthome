@@ -412,7 +412,7 @@ const Crops: React.FC = () => {
                               onClick={handleDroidcamCapture}
                             >
                               <Smartphone className="h-5 w-5 mr-2" />
-                              Capture from DroidCam
+                              Capture from The IP Camera
                             </button>
                             
                             <div className="mt-2 flex space-x-2">
